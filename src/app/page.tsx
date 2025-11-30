@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import { useToast } from "@/components/ToastProvider";
 
 type Account = {
@@ -88,14 +90,22 @@ function formatDate(date: string) {
   });
 }
 
+function formatDateInput(date: Date | null) {
+  if (!date) return "";
+  const dd = `${date.getDate()}`.padStart(2, "0");
+  const mm = `${date.getMonth() + 1}`.padStart(2, "0");
+  const yyyy = date.getFullYear();
+  return `${dd}.${mm}.${yyyy}`;
+}
+
 export default function Page() {
   const { showToast } = useToast();
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [batchForm, setBatchForm] = useState({
     name: "",
-    startDate: "",
-    endDate: "",
+    startDate: null as Date | null,
+    endDate: null as Date | null,
     timezone: DEFAULT_TZ,
     themes: "",
     notes: "",
@@ -181,13 +191,9 @@ useEffect(() => {
 
   async function generateBrief(mode: "themes" | "brief") {
     const start =
-      batchForm.startDate && batchForm.startDate.length > 0
-        ? batchForm.startDate
-        : TODAY_ISO;
+      batchForm.startDate ? formatDateInput(batchForm.startDate) : TODAY_ISO;
     const end =
-      batchForm.endDate && batchForm.endDate.length > 0
-        ? batchForm.endDate
-        : TODAY_ISO;
+      batchForm.endDate ? formatDateInput(batchForm.endDate) : TODAY_ISO;
 
     const platforms = Object.entries(batchForm.platforms)
       .filter(([, v]) => v)
@@ -256,8 +262,8 @@ useEffect(() => {
 
       const body = {
         name: batchForm.name || defaultWeekName(),
-        startDate: batchForm.startDate,
-        endDate: batchForm.endDate,
+        startDate: formatDateInput(batchForm.startDate),
+        endDate: formatDateInput(batchForm.endDate),
         timezone: batchForm.timezone,
         themes: batchForm.themes
           .split(",")
@@ -508,22 +514,28 @@ useEffect(() => {
                   placeholder="Неделя ..."
                 />
                 <div className="grid grid-cols-2 gap-3">
-                  <LabeledInput
-                    label="Начало"
-                    type="date"
-                    value={batchForm.startDate}
-                    onChange={(value) =>
-                      setBatchForm((p) => ({ ...p, startDate: value }))
-                    }
-                  />
-                  <LabeledInput
-                    label="Конец"
-                    type="date"
-                    value={batchForm.endDate}
-                    onChange={(value) =>
-                      setBatchForm((p) => ({ ...p, endDate: value }))
-                    }
-                  />
+                  <div className="space-y-1 text-sm text-slate-900">
+                    <span className="text-xs text-slate-500">Начало</span>
+                    <DatePicker
+                      selected={batchForm.startDate}
+                      onChange={(date) =>
+                        setBatchForm((p) => ({ ...p, startDate: date }))
+                      }
+                      dateFormat="dd.MM.yyyy"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+                    />
+                  </div>
+                  <div className="space-y-1 text-sm text-slate-900">
+                    <span className="text-xs text-slate-500">Конец</span>
+                    <DatePicker
+                      selected={batchForm.endDate}
+                      onChange={(date) =>
+                        setBatchForm((p) => ({ ...p, endDate: date }))
+                      }
+                      dateFormat="dd.MM.yyyy"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+                    />
+                  </div>
                 </div>
                 <LabeledInput
                   label="Таймзона"

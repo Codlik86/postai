@@ -1,5 +1,4 @@
--- Recreate core tables for PostAI planner (data will be lost).
--- Run locally: npx prisma migrate dev
+-- Init migration resetting schema for PostAI
 
 DROP TABLE IF EXISTS "Post" CASCADE;
 DROP TABLE IF EXISTS "ContentBatch" CASCADE;
@@ -8,7 +7,7 @@ DROP TABLE IF EXISTS "Account" CASCADE;
 CREATE TABLE "Account" (
     "id" SERIAL NOT NULL,
     "platform" TEXT NOT NULL,
-    "username" TEXT NOT NULL,
+    "username" TEXT,
     "displayName" TEXT,
     "lateAccountId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

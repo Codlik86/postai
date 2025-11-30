@@ -4,14 +4,21 @@ import prisma from "@/lib/db";
 const DEFAULT_TZ = process.env.DEFAULT_TIMEZONE ?? "Europe/Moscow";
 
 function parseDate(value: string) {
+  const parts = value.includes(".")
+    ? value.split(".").map(Number)
+    : value.split("-").map(Number);
+  if (parts.length === 3) {
+    const [d, m, y] = parts;
+    return new Date(y, m - 1, d);
+  }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) throw new Error("Invalid date");
   return date;
 }
 
-function dateRange(start: string, end: string) {
-  const startDate = parseDate(start);
-  const endDate = parseDate(end);
+function dateRange(start: Date, end: Date) {
+  const startDate = start;
+  const endDate = end;
   const days = [];
   for (
     let d = new Date(startDate);
@@ -74,7 +81,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const days = dateRange(startDate, endDate);
+    const start = parseDate(startDate);
+    const end = parseDate(endDate);
+    const days = dateRange(start, end);
     const accounts = await prisma.account.findMany({
       where: { platform: { in: platforms } },
     });
@@ -92,10 +101,10 @@ export async function POST(request: NextRequest) {
     const batch = await prisma.contentBatch.create({
       data: {
         name,
-        startDate: parseDate(startDate),
-        endDate: parseDate(endDate),
+        startDate: start,
+        endDate: end,
         timezone,
-        themes: themes.join(", "),
+        themes: Array.isArray(themes) ? themes.join(", ") : themes,
         gptBrief,
         status: "draft",
       },
@@ -122,7 +131,7 @@ export async function POST(request: NextRequest) {
           accountId: account.id,
           platform,
           kind: platformType(platform),
-          date: parseDate(day),
+          date: day,
           time: "10:00",
           caption: null,
           firstComment: null,
