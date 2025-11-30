@@ -1,12 +1,4 @@
--- Migration for Late-based scheduler.
--- Run locally: npx prisma migrate dev
-
-DROP TABLE IF EXISTS "Post" CASCADE;
-DROP TABLE IF EXISTS "ContentItem" CASCADE;
-DROP TABLE IF EXISTS "ContentBatch" CASCADE;
-DROP TABLE IF EXISTS "Account" CASCADE;
-DROP TABLE IF EXISTS "BufferAuth" CASCADE;
-
+-- CreateTable
 CREATE TABLE "Account" (
     "id" SERIAL NOT NULL,
     "platform" TEXT NOT NULL,
@@ -16,10 +8,11 @@ CREATE TABLE "Account" (
     "lateAccountId" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    CONSTRAINT "Account_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "Account_lateAccountId_key" UNIQUE ("lateAccountId")
+
+    CONSTRAINT "Account_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
 CREATE TABLE "ContentBatch" (
     "id" SERIAL NOT NULL,
     "name" TEXT NOT NULL,
@@ -31,9 +24,11 @@ CREATE TABLE "ContentBatch" (
     "status" TEXT NOT NULL DEFAULT 'draft',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+
     CONSTRAINT "ContentBatch_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
 CREATE TABLE "Post" (
     "id" SERIAL NOT NULL,
     "batchId" INTEGER NOT NULL,
@@ -53,9 +48,18 @@ CREATE TABLE "Post" (
     "lateError" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    CONSTRAINT "Post_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "Post_latePostId_key" UNIQUE ("latePostId")
+
+    CONSTRAINT "Post_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateIndex
+CREATE UNIQUE INDEX "Account_lateAccountId_key" ON "Account"("lateAccountId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Post_latePostId_key" ON "Post"("latePostId");
+
+-- AddForeignKey
 ALTER TABLE "Post" ADD CONSTRAINT "Post_batchId_fkey" FOREIGN KEY ("batchId") REFERENCES "ContentBatch"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "Post" ADD CONSTRAINT "Post_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Post" ADD CONSTRAINT "Post_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

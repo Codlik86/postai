@@ -14,6 +14,78 @@ export type GeneratedPostOutput = {
   firstComment?: string;
 };
 
+export async function generateWeeklyBrief(params: {
+  startDate: string;
+  endDate: string;
+  platforms: string[];
+  notes?: string;
+}): Promise<{ themes: string; brief: string }> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
+
+  const model = process.env.OPENAI_MODEL || DEFAULT_MODEL;
+  const baseUrl =
+    process.env.OPENAI_BASE_URL?.replace(/\/+$/, "") ||
+    "https://api.openai.com/v1";
+
+  const userPayload = {
+    task:
+      "Сгенерируй список тем для контента Помни на указанную неделю и краткое ТЗ для генерации постов.",
+    period: { startDate: params.startDate, endDate: params.endDate },
+    platforms: params.platforms,
+    notes: params.notes ?? "",
+    responseShape: {
+      themes: "строка (через запятую или короткими предложениями)",
+      brief: "2-4 абзаца про фокус недели, тон, подачу",
+    },
+  };
+
+  const res = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: JSON.stringify(userPayload, null, 2) },
+      ],
+      temperature: 0.7,
+      response_format: { type: "json_object" },
+    }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OpenAI error ${res.status}: ${text}`);
+  }
+
+  const json = await res.json();
+  const content =
+    json?.choices?.[0]?.message?.content ??
+    json?.choices?.[0]?.message ??
+    "";
+
+  if (typeof content !== "string") {
+    throw new Error("Unexpected OpenAI response");
+  }
+
+  try {
+    const parsed = JSON.parse(content) as {
+      themes?: string;
+      brief?: string;
+    };
+    if (!parsed.themes || !parsed.brief) {
+      throw new Error("Missing themes or brief");
+    }
+    return { themes: parsed.themes, brief: parsed.brief };
+  } catch (err) {
+    throw new Error("Failed to parse JSON from OpenAI");
+  }
+}
+
 export async function generatePostsForBatch(args: {
   productDescription: string;
   batchName: string;

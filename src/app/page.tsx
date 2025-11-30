@@ -47,6 +47,7 @@ type LateMediaFile = {
 };
 
 const DEFAULT_TZ = process.env.NEXT_PUBLIC_DEFAULT_TIMEZONE ?? "Europe/Moscow";
+const TODAY_ISO = new Date().toISOString().slice(0, 10);
 
 function localToUtc(date: string, time: string, tz: string) {
   const ref = new Date(`${date}T${time}:00Z`);
@@ -145,6 +146,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [scheduling, setScheduling] = useState(false);
+  const [isGeneratingThemes, setIsGeneratingThemes] = useState(false);
+  const [isGeneratingBrief, setIsGeneratingBrief] = useState(false);
 
   useEffect(() => {
     const name = defaultWeekName();
@@ -182,6 +185,73 @@ export default function Home() {
       });
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function generateBrief(mode: "themes" | "brief") {
+    const start =
+      batchForm.startDate && batchForm.startDate.length > 0
+        ? batchForm.startDate
+        : TODAY_ISO;
+    const end =
+      batchForm.endDate && batchForm.endDate.length > 0
+        ? batchForm.endDate
+        : TODAY_ISO;
+
+    const platforms = Object.entries(batchForm.platforms)
+      .filter(([, v]) => v)
+      .map(([k]) => k);
+
+    if (platforms.length === 0) {
+      showToast({
+        type: "error",
+        title: "Отметь хотя бы одну платформу",
+      });
+      return;
+    }
+
+    if (mode === "themes") setIsGeneratingThemes(true);
+    if (mode === "brief") setIsGeneratingBrief(true);
+
+    try {
+      const res = await fetch("/api/ai/weekly-brief", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startDate: start,
+          endDate: end,
+          platforms,
+          notes: batchForm.notes || batchForm.themes,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Ошибка генерации");
+      }
+
+      const data = await res.json();
+      setBatchForm((prev) => ({
+        ...prev,
+        themes: mode === "themes" || (!prev.themes && data.themes)
+          ? data.themes
+          : prev.themes,
+        notes:
+          mode === "brief" || (!prev.notes && data.brief)
+            ? data.brief
+            : prev.notes,
+      }));
+
+      showToast({ type: "success", title: "Готово" });
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Не удалось сгенерировать",
+        description: err.message,
+      });
+    } finally {
+      setIsGeneratingThemes(false);
+      setIsGeneratingBrief(false);
     }
   }
 
@@ -426,6 +496,11 @@ export default function Home() {
             />
             <LabeledTextarea
               label="Темы недели"
+              actionLabel={isGeneratingThemes ? "Генерация..." : "🎲 Сгенерировать темы"}
+              onAction={
+                isGeneratingThemes || isGeneratingBrief ? undefined : () => generateBrief("themes")
+              }
+              disabled={isGeneratingThemes}
               placeholder="Темы через запятую: тревога, выгорание..."
               value={batchForm.themes}
               onChange={(value) =>
@@ -434,6 +509,11 @@ export default function Home() {
             />
             <LabeledTextarea
               label="ТЗ для GPT (опционально)"
+              actionLabel={isGeneratingBrief ? "Генерация..." : "✨ Сгенерировать ТЗ"}
+              onAction={
+                isGeneratingThemes || isGeneratingBrief ? undefined : () => generateBrief("brief")
+              }
+              disabled={isGeneratingBrief}
               placeholder="Подробное ТЗ для недели..."
               value={batchForm.notes}
               onChange={(value) =>
@@ -597,13 +677,28 @@ function LabeledInput(props: {
 
 function LabeledTextarea(props: {
   label: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  disabled?: boolean;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
 }) {
   return (
     <label className="block space-y-1 text-sm text-slate-200">
-      <span className="text-xs text-slate-400">{props.label}</span>
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-slate-400">{props.label}</span>
+        {props.onAction && props.actionLabel && (
+          <button
+            type="button"
+            onClick={props.onAction}
+            disabled={props.disabled}
+            className="text-[11px] font-semibold text-indigo-200 hover:text-indigo-100 disabled:opacity-60"
+          >
+            {props.actionLabel}
+          </button>
+        )}
+      </div>
       <textarea
         value={props.value}
         onChange={(e) => props.onChange(e.target.value)}
