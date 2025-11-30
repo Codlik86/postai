@@ -25,7 +25,7 @@ function dateRange(start: Date, end: Date) {
     d.getTime() <= endDate.getTime();
     d.setDate(d.getDate() + 1)
   ) {
-    days.push(d.toISOString().slice(0, 10));
+    days.push(new Date(d));
   }
   return days;
 }
