@@ -1,0 +1,60 @@
+-- This migration restructures accounts to use integer IDs, updates relations, and adds BufferAuth.
+
+-- Drop dependent tables to allow type changes (assuming no production data yet).
+DROP TABLE IF EXISTS "ContentItem" CASCADE;
+DROP TABLE IF EXISTS "Account" CASCADE;
+DROP TABLE IF EXISTS "ContentBatch" CASCADE;
+DROP TABLE IF EXISTS "BufferAuth" CASCADE;
+
+-- Recreate tables with new shapes.
+CREATE TABLE "ContentBatch" (
+    "id" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "startDate" TIMESTAMP(3) NOT NULL,
+    "endDate" TIMESTAMP(3) NOT NULL,
+    "status" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ContentBatch_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE "Account" (
+    "id" SERIAL NOT NULL,
+    "type" TEXT NOT NULL,
+    "bufferProfileId" TEXT NOT NULL,
+    "displayName" TEXT NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "Account_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE "ContentItem" (
+    "id" TEXT NOT NULL,
+    "batchId" TEXT NOT NULL,
+    "date" TIMESTAMP(3) NOT NULL,
+    "accountId" INTEGER NOT NULL,
+    "type" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "body" TEXT,
+    "script" TEXT,
+    "hashtags" TEXT,
+    "cta" TEXT,
+    "bufferUpdateId" TEXT,
+    "status" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "ContentItem_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE "BufferAuth" (
+    "id" INTEGER NOT NULL DEFAULT 1,
+    "accessToken" TEXT NOT NULL,
+    "refreshToken" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "BufferAuth_pkey" PRIMARY KEY ("id")
+);
+
+ALTER TABLE "ContentItem" ADD CONSTRAINT "ContentItem_batchId_fkey" FOREIGN KEY ("batchId") REFERENCES "ContentBatch"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "ContentItem" ADD CONSTRAINT "ContentItem_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "Account"("id") ON DELETE CASCADE ON UPDATE CASCADE;

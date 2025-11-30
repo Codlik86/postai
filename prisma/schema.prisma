@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id            Int      @id @default(autoincrement())
+  platform      String
+  username      String
+  displayName   String
+  avatarUrl     String?
+  lateAccountId String   @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  posts Post[]
+}
+
+model ContentBatch {
+  id        Int      @id @default(autoincrement())
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  timezone  String   @default("Europe/Moscow")
+  themes    String?
+  notes     String?
+  status    String   @default("draft") // draft | generated | partially_scheduled | scheduled
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  posts Post[]
+}
+
+model Post {
+  id            Int          @id @default(autoincrement())
+  batch         ContentBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batchId       Int
+
+  account       Account      @relation(fields: [accountId], references: [id])
+  accountId     Int
+  platform      String
+
+  scheduledFor  DateTime
+  localTime     String
+  timezone      String
+
+  type          String       @default("post")
+  content       String
+  firstComment  String?
+  status        String       @default("generated")
+
+  mediaUrl      String?
+  mediaType     String?
+  mediaFilename String?
+
+  latePostId    String?      @unique
+  lateError     String?
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
