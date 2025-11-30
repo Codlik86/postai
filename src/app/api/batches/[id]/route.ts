@@ -1,28 +1,46 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import prisma from "@/lib/db";
+import { prisma } from "@/lib/db";
 
 export async function GET(
-  _request: NextRequest,
+  _req: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await context.params;
-  const numericId = Number(id);
-  if (Number.isNaN(numericId)) {
-    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
-  }
+  try {
+    const { id } = await context.params;
+    const batchId = Number(id);
 
-  const batch = await prisma.contentBatch.findUnique({
-    where: { id: numericId },
-    include: {
-      posts: {
-        include: { account: true },
-        orderBy: [{ scheduledFor: "asc" }],
+    if (!id || Number.isNaN(batchId)) {
+      return NextResponse.json({ error: "Invalid batch id" }, { status: 400 });
+    }
+
+    const batch = await prisma.contentBatch.findUnique({
+      where: { id: batchId },
+      include: {
+        posts: {
+          include: {
+            account: true,
+          },
+          orderBy: [{ scheduledFor: "asc" }, { id: "asc" }],
+        },
       },
-    },
-  });
+    });
 
-  if (!batch) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!batch) {
+      return NextResponse.json({ error: "Batch not found" }, { status: 404 });
+    }
 
-  return NextResponse.json(batch);
+    const { posts, ...batchWithoutPosts } = batch;
+
+    return NextResponse.json({
+      batch: batchWithoutPosts,
+      posts,
+    });
+  } catch (err) {
+    console.error("Failed to load batch by id:", err);
+    return NextResponse.json(
+      { error: "Failed to load batch" },
+      { status: 500 },
+    );
+  }
 }
