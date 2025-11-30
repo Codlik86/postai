@@ -101,7 +101,18 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const postsToCreate = [];
+    const postsToCreate: {
+      batchId: number;
+      accountId: number;
+      platform: string;
+      kind: string;
+      date: Date;
+      time: string;
+      caption: string | null;
+      firstComment: string | null;
+      mediaUrl: string | null;
+      status: string;
+    }[] = [];
     days.forEach((day) => {
       platforms.forEach((platform) => {
         const account = accounts.find((a) => a.platform === platform);
