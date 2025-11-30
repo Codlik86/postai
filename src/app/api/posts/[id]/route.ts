@@ -18,16 +18,11 @@ export async function PATCH(
     const updated = await prisma.post.update({
       where: { id: numericId },
       data: {
-        content: body.content,
+        caption: body.caption,
         firstComment: body.firstComment,
-        scheduledFor: body.scheduledFor
-          ? new Date(body.scheduledFor)
-          : undefined,
-        localTime: body.localTime,
-        type: body.type,
+        time: body.time ?? undefined,
+        kind: body.kind ?? undefined,
         mediaUrl: body.media?.url ?? body.mediaUrl,
-        mediaType: body.media?.type ?? body.mediaType,
-        mediaFilename: body.media?.filename ?? body.mediaFilename,
         status: body.status ?? "edited",
       },
     });

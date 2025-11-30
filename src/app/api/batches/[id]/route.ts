@@ -21,7 +21,7 @@ export async function GET(
           include: {
             account: true,
           },
-          orderBy: [{ scheduledFor: "asc" }, { id: "asc" }],
+          orderBy: [{ date: "asc" }, { time: "asc" }, { id: "asc" }],
         },
       },
     });

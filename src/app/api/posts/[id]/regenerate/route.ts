@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import {
-  generatePostsForBatch,
+  generateDayPosts,
   type PlannedPostInput,
 } from "@/lib/gpt";
 
@@ -27,28 +27,28 @@ export async function POST(
     }
 
     const planned: PlannedPostInput = {
-      date: post.scheduledFor.toISOString().slice(0, 10),
+      date: post.date.toISOString().slice(0, 10),
       platform: post.platform,
-      type: post.type,
-      theme: post.batch.themes ?? "",
+      kind: post.kind,
+      theme: post.batch.themes?.split(",")?.[0]?.trim() ?? "",
     };
 
-    const generated = await generatePostsForBatch({
+    const generated = await generateDayPosts({
       productDescription:
-        post.batch.notes ||
+        post.batch.gptBrief ||
         "Бренд 'Помни' — телеграм-бот эмоциональной поддержки и дневник.",
       batchName: post.batch.name,
       themes: post.batch.themes?.split(",").map((t) => t.trim()) ?? [],
       posts: [planned],
     });
 
-    const content = generated[0]?.content ?? post.content;
+    const content = generated[0]?.caption ?? post.caption ?? "";
     const firstComment = generated[0]?.firstComment ?? post.firstComment;
 
     const updated = await prisma.post.update({
       where: { id: post.id },
       data: {
-        content,
+        caption: content,
         firstComment,
         status: "generated",
       },

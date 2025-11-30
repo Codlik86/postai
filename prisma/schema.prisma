@@ -11,8 +11,7 @@ model Account {
   id            Int      @id @default(autoincrement())
   platform      String
   username      String
-  displayName   String
-  avatarUrl     String?
+  displayName   String?
   lateAccountId String   @unique
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -27,8 +26,8 @@ model ContentBatch {
   endDate   DateTime
   timezone  String   @default("Europe/Moscow")
   themes    String?
-  notes     String?
-  status    String   @default("draft") // draft | generated | partially_scheduled | scheduled
+  gptBrief  String?
+  status    String   @default("draft")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -37,30 +36,23 @@ model ContentBatch {
 }
 
 model Post {
-  id            Int          @id @default(autoincrement())
-  batch         ContentBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  batchId       Int
+  id           Int          @id @default(autoincrement())
+  batch        ContentBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batchId      Int
 
-  account       Account      @relation(fields: [accountId], references: [id])
-  accountId     Int
-  platform      String
+  account      Account      @relation(fields: [accountId], references: [id])
+  accountId    Int
 
-  scheduledFor  DateTime
-  localTime     String
-  timezone      String
+  date         DateTime
+  time         String
+  platform     String
+  kind         String
 
-  type          String       @default("post")
-  content       String
-  firstComment  String?
-  status        String       @default("generated")
+  caption      String?
+  firstComment String?
+  mediaUrl     String?
 
-  mediaUrl      String?
-  mediaType     String?
-  mediaFilename String?
-
-  latePostId    String?      @unique
-  lateError     String?
-
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  status       String   @default("draft")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }

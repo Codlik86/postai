@@ -27,17 +27,13 @@ type Post = {
   batchId: number;
   platform: string;
   accountId: number;
-  scheduledFor: string;
-  localTime: string;
-  timezone: string;
-  type: string;
-  content: string;
+  date: string;
+  time: string;
+  kind: string;
+  caption?: string | null;
   firstComment?: string | null;
   status: PostStatus | string;
   mediaUrl?: string | null;
-  mediaType?: string | null;
-  mediaFilename?: string | null;
-  lateError?: string | null;
 };
 
 type LateMediaFile = {
@@ -49,28 +45,6 @@ type LateMediaFile = {
 const DEFAULT_TZ = process.env.NEXT_PUBLIC_DEFAULT_TIMEZONE ?? "Europe/Moscow";
 const TODAY_ISO = new Date().toISOString().slice(0, 10);
 
-function localToUtc(date: string, time: string, tz: string) {
-  const ref = new Date(`${date}T${time}:00Z`);
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).formatToParts(ref);
-  const get = (type: string) => fmt.find((p) => p.type === type)?.value ?? "00";
-  const year = Number(get("year"));
-  const month = Number(get("month"));
-  const day = Number(get("day"));
-  const hour = Number(get("hour"));
-  const minute = Number(get("minute"));
-  const second = Number(get("second"));
-  return new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-}
-
 const platformLabel: Record<string, string> = {
   instagram: "Instagram",
   tiktok: "TikTok",
@@ -79,14 +53,15 @@ const platformLabel: Record<string, string> = {
 };
 
 const statusClasses: Record<string, string> = {
-  generated: "bg-slate-800 text-slate-200",
-  edited: "bg-blue-500/20 text-blue-200",
-  scheduled: "bg-emerald-500/20 text-emerald-200",
-  failed: "bg-rose-500/20 text-rose-200",
+  draft: "bg-slate-100 text-slate-600 ring-1 ring-slate-200",
+  generated: "bg-slate-100 text-slate-700 ring-1 ring-slate-200",
+  edited: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
+  scheduled: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+  failed: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
 };
 
 function StatusBadge({ status, error }: { status: string; error?: string }) {
-  const cls = statusClasses[status] ?? "bg-slate-700 text-slate-200";
+  const cls = statusClasses[status] ?? "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
   return (
     <span
       title={error}
@@ -98,23 +73,6 @@ function StatusBadge({ status, error }: { status: string; error?: string }) {
   );
 }
 
-function useGroupedPosts(posts: Post[]) {
-  return useMemo(() => {
-    const groups: Record<string, Post[]> = {};
-    [...posts]
-      .sort(
-        (a, b) =>
-          new Date(a.scheduledFor).getTime() -
-          new Date(b.scheduledFor).getTime(),
-      )
-      .forEach((post) => {
-        const date = post.scheduledFor.slice(0, 10);
-        groups[date] = groups[date] ? [...groups[date], post] : [post];
-      });
-    return groups;
-  }, [posts]);
-}
-
 function platformIcon(platform: string) {
   if (platform === "instagram") return "IG";
   if (platform === "tiktok") return "TT";
@@ -123,8 +81,16 @@ function platformIcon(platform: string) {
   return platform.slice(0, 2).toUpperCase();
 }
 
-export default function Home() {
+function formatDate(date: string) {
+  return new Date(date).toLocaleDateString("ru-RU", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+export default function Page() {
   const { showToast } = useToast();
+
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [batchForm, setBatchForm] = useState({
     name: "",
@@ -139,24 +105,49 @@ export default function Home() {
       threads: false,
       telegram: false,
     },
-    postsPerDay: 1,
   });
   const [activeBatch, setActiveBatch] = useState<Batch | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
+  const [activeDay, setActiveDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [scheduling, setScheduling] = useState(false);
   const [isGeneratingThemes, setIsGeneratingThemes] = useState(false);
   const [isGeneratingBrief, setIsGeneratingBrief] = useState(false);
 
+useEffect(() => {
+  const name = defaultWeekName();
+  setBatchForm((prev) => ({ ...prev, name }));
+  fetch("/api/accounts")
+    .then((res) => res.json())
+    .then((data) => setAccounts(data.accounts ?? []))
+    .catch(() => {});
+}, []);
+
   useEffect(() => {
-    const name = defaultWeekName();
-    setBatchForm((prev) => ({ ...prev, name }));
-    fetch("/api/accounts")
-      .then((res) => res.json())
-      .then((data) => setAccounts(data.accounts ?? []))
-      .catch(() => {});
-  }, []);
+    if (posts.length && selectedPostId === null) {
+      setSelectedPostId(posts[0].id);
+      const firstDate = posts[0].date?.slice(0, 10);
+      setActiveDay(firstDate);
+    }
+    if (!posts.length) {
+      setSelectedPostId(null);
+      setActiveDay(null);
+    }
+  }, [posts, selectedPostId]);
+
+  useEffect(() => {
+    if (activeDay) {
+      const match = posts.find((p) => p.date?.slice(0, 10) === activeDay);
+      if (match) setSelectedPostId(match.id);
+    }
+  }, [activeDay, posts]);
+
+  const selectedPost = useMemo(
+    () => posts.find((p) => p.id === selectedPostId) ?? null,
+    [posts, selectedPostId],
+  );
 
   function defaultWeekName() {
     const now = new Date();
@@ -233,9 +224,10 @@ export default function Home() {
       const data = await res.json();
       setBatchForm((prev) => ({
         ...prev,
-        themes: mode === "themes" || (!prev.themes && data.themes)
-          ? data.themes
-          : prev.themes,
+        themes:
+          mode === "themes" || (!prev.themes && data.themes)
+            ? data.themes
+            : prev.themes,
         notes:
           mode === "brief" || (!prev.notes && data.brief)
             ? data.brief
@@ -273,7 +265,6 @@ export default function Home() {
           .filter(Boolean),
         notes: batchForm.notes,
         platforms,
-        postsPerDay: batchForm.postsPerDay,
       };
 
       const res = await fetch("/api/batches", {
@@ -288,6 +279,8 @@ export default function Home() {
       const data = await res.json();
       setActiveBatch(data.batch);
       setPosts(data.posts);
+      setSelectedPostId(data.posts?.[0]?.id ?? null);
+    setActiveDay(data.posts?.[0] ? data.posts[0].date?.slice(0, 10) : null);
       showToast({ type: "success", title: "План создан" });
       if (batchForm.name === "") {
         setBatchForm((prev) => ({ ...prev, name: defaultWeekName() }));
@@ -308,14 +301,15 @@ export default function Home() {
     if (!res.ok) return;
     const data = await res.json();
     setActiveBatch({
-      id: data.id,
-      name: data.name,
-      startDate: data.startDate,
-      endDate: data.endDate,
-      timezone: data.timezone,
-      status: data.status,
+      id: data.batch.id,
+      name: data.batch.name,
+      startDate: data.batch.startDate,
+      endDate: data.batch.endDate,
+      timezone: data.batch.timezone,
+      status: data.batch.status,
     });
     setPosts(data.posts ?? []);
+    setSelectedPostId(data.posts?.[0]?.id ?? null);
   }
 
   async function updatePost(id: number, payload: Partial<Post>) {
@@ -358,8 +352,6 @@ export default function Home() {
     const media: LateMediaFile = await res.json();
     await updatePost(id, {
       mediaUrl: media.url,
-      mediaType: media.type,
-      mediaFilename: media.filename,
       status: "edited",
     } as any);
     showToast({ type: "success", title: "Медиа загружено" });
@@ -369,10 +361,11 @@ export default function Home() {
     if (!activeBatch) return;
     setScheduling(true);
     try {
-      const res = await fetch(
-        `/api/batches/${activeBatch.id}/schedule-late`,
-        { method: "POST" },
-      );
+      const res = await fetch(`/api/late/schedule`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batchId: activeBatch.id }),
+      });
       if (!res.ok) throw new Error("Ошибка планирования");
       const result = await res.json();
       const failed = (result.results || []).filter(
@@ -409,247 +402,372 @@ export default function Home() {
     [],
   );
 
-  const groupedPosts = useGroupedPosts(posts);
+  const days = useMemo(() => {
+    const uniq = new Set<string>();
+    posts.forEach((p) => uniq.add(p.date?.slice(0, 10)));
+    return Array.from(uniq).sort();
+  }, [posts]);
+
+  useEffect(() => {
+    if (!activeDay && days.length) {
+      setActiveDay(days[0]);
+    }
+  }, [activeDay, days]);
+
+  async function generateAllPostsForDay(day: string) {
+    if (!activeBatch) return;
+    try {
+      const res = await fetch("/api/generate/day", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batchId: activeBatch.id, date: day }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Ошибка генерации");
+      }
+      const data = await res.json();
+      setPosts(data.posts ?? []);
+      showToast({ type: "success", title: "Посты дня обновлены" });
+    } catch (err: any) {
+      showToast({
+        type: "error",
+        title: "Не удалось сгенерировать",
+        description: err.message,
+      });
+    }
+  }
 
   return (
-    <main className="grid gap-6 md:grid-cols-[360px,1fr]">
-      <aside className="space-y-6">
-        <section className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-xl shadow-indigo-500/5">
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-indigo-300">
-                Late
-              </p>
-              <h2 className="text-lg font-semibold text-white">
-                Аккаунты Late
-              </h2>
-            </div>
-            <button
-              onClick={syncAccounts}
-              disabled={syncing}
-              className="rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-1 text-xs font-semibold text-white shadow hover:shadow-indigo-500/30 disabled:opacity-60"
-            >
-              {syncing ? "Синк..." : "Синхронизировать"}
-            </button>
-          </div>
-          <div className="space-y-2">
-            {accounts.length === 0 && (
-              <p className="text-sm text-slate-400">
-                Подключи аккаунты в Late и нажми “Синхронизировать аккаунты”.
-              </p>
-            )}
-            {accounts.map((acc) => (
-              <div
-                key={acc.id}
-                className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/5 px-3 py-2"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500/40 to-sky-500/40 text-xs font-semibold text-white">
-                  {platformIcon(acc.platform)}
-                </div>
-                <div className="leading-tight">
-                  <p className="text-sm text-white">{acc.displayName}</p>
-                  <p className="text-xs text-slate-400">@{acc.username}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-xl shadow-indigo-500/5">
-          <div className="mb-3">
-            <p className="text-xs uppercase tracking-[0.3em] text-indigo-300">
-              Новый план
-            </p>
-            <h2 className="text-lg font-semibold text-white">Панель</h2>
-          </div>
-          <div className="space-y-3">
-            <LabeledInput
-              label="Название"
-              value={batchForm.name}
-              onChange={(value) => setBatchForm((p) => ({ ...p, name: value }))}
-              placeholder="Неделя ..."
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <LabeledInput
-                label="Начало"
-                type="date"
-                value={batchForm.startDate}
-                onChange={(value) =>
-                  setBatchForm((p) => ({ ...p, startDate: value }))
-                }
-              />
-              <LabeledInput
-                label="Конец"
-                type="date"
-                value={batchForm.endDate}
-                onChange={(value) =>
-                  setBatchForm((p) => ({ ...p, endDate: value }))
-                }
-              />
-            </div>
-            <LabeledInput
-              label="Таймзона"
-              value={batchForm.timezone}
-              onChange={(value) =>
-                setBatchForm((p) => ({ ...p, timezone: value }))
-              }
-            />
-            <LabeledTextarea
-              label="Темы недели"
-              actionLabel={isGeneratingThemes ? "Генерация..." : "🎲 Сгенерировать темы"}
-              onAction={
-                isGeneratingThemes || isGeneratingBrief ? undefined : () => generateBrief("themes")
-              }
-              disabled={isGeneratingThemes}
-              placeholder="Темы через запятую: тревога, выгорание..."
-              value={batchForm.themes}
-              onChange={(value) =>
-                setBatchForm((p) => ({ ...p, themes: value }))
-              }
-            />
-            <LabeledTextarea
-              label="ТЗ для GPT (опционально)"
-              actionLabel={isGeneratingBrief ? "Генерация..." : "✨ Сгенерировать ТЗ"}
-              onAction={
-                isGeneratingThemes || isGeneratingBrief ? undefined : () => generateBrief("brief")
-              }
-              disabled={isGeneratingBrief}
-              placeholder="Подробное ТЗ для недели..."
-              value={batchForm.notes}
-              onChange={(value) =>
-                setBatchForm((p) => ({ ...p, notes: value }))
-              }
-            />
-            <div>
-              <p className="text-xs text-slate-300">Платформы</p>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                {platformList.map((p) => (
-                  <label
-                    key={p.key}
-                    className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={(batchForm.platforms as any)[p.key]}
-                      onChange={(e) =>
-                        setBatchForm((prev) => ({
-                          ...prev,
-                          platforms: {
-                            ...prev.platforms,
-                            [p.key]: e.target.checked,
-                          },
-                        }))
-                      }
-                    />
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-indigo-100">
-                      {platformIcon(p.key)}
-                    </span>
-                    {p.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-            <label className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white">
-              <span>Постов в день</span>
-              <input
-                type="number"
-                min={1}
-                max={3}
-                className="w-16 rounded bg-slate-900 px-2 py-1 text-right text-sm"
-                value={batchForm.postsPerDay}
-                onChange={(e) =>
-                  setBatchForm((p) => ({
-                    ...p,
-                    postsPerDay: Number(e.target.value) || 1,
-                  }))
-                }
-              />
-            </label>
-            <button
-              onClick={createBatch}
-              disabled={loading}
-              className="w-full rounded-xl bg-gradient-to-r from-indigo-500 to-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-500/30 transition hover:scale-[1.01] disabled:opacity-60"
-            >
-              {loading ? "Генерируем..." : "Создать план"}
-            </button>
-          </div>
-        </section>
-      </aside>
-
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 shadow-xl shadow-indigo-500/5">
+    <main className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-6xl px-4 py-8 lg:px-8">
+        <header className="mb-8 flex items-center justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-indigo-300">
-              Текущий батч
+            <h1 className="text-2xl font-semibold text-slate-900">PostAI</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Планировщик контента для Помни
             </p>
-            <h3 className="text-lg font-semibold text-white">
-              {activeBatch ? activeBatch.name : "Не выбран"}
-            </h3>
-            {activeBatch && (
-              <p className="text-sm text-slate-400">
-                {activeBatch.startDate?.slice(0, 10)} —{" "}
-                {activeBatch.endDate?.slice(0, 10)} · {activeBatch.timezone}
-              </p>
-            )}
           </div>
-          <div className="flex items-center gap-2">
-            {activeBatch && (
-              <StatusBadge status={activeBatch.status} />
-            )}
-            {activeBatch && (
-              <>
-                <button
-                  className="rounded-lg border border-white/10 px-3 py-2 text-sm text-white hover:border-indigo-400"
-                  onClick={() => reloadBatch(activeBatch.id)}
-                >
-                  Обновить батч
-                </button>
-                <button
-                  className="rounded-lg bg-gradient-to-r from-indigo-500 to-sky-500 px-3 py-2 text-sm font-semibold text-white shadow hover:shadow-indigo-500/30 disabled:opacity-60"
-                  disabled={scheduling}
-                  onClick={scheduleAll}
-                >
-                  {scheduling ? "Отправляем..." : "Запланировать всё в Late"}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+        </header>
 
-        {!activeBatch && (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-slate-400 shadow-xl shadow-indigo-500/5">
-            Сначала создайте план слева, чтобы увидеть посты.
-          </div>
-        )}
-
-        {activeBatch &&
-          Object.entries(groupedPosts).map(([date, items]) => (
-            <div key={date} className="space-y-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-indigo-200">
-                <span className="h-px flex-1 bg-white/10" />
-                <span className="whitespace-nowrap bg-white/5 px-3 py-1 rounded-full border border-white/10">
-                  {new Date(date).toLocaleDateString("ru-RU", {
-                    weekday: "short",
-                    day: "numeric",
-                    month: "long",
-                  })}
-                </span>
-                <span className="h-px flex-1 bg-white/10" />
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+          {/* Левая колонка */}
+          <div className="space-y-6">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-sm font-semibold tracking-wide text-slate-900">
+                    Late
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Подключи аккаунты в Late и нажми «Синхронизировать».
+                  </p>
+                </div>
+                <button
+                  onClick={syncAccounts}
+                  disabled={syncing}
+                  className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {syncing ? "Синк..." : "Синхронизировать"}
+                </button>
               </div>
-              <div className="space-y-4">
-                {items.map((post) => (
-                  <PostRow
-                    key={post.id}
-                    post={post}
-                    onChange={updatePost}
-                    onRegenerate={regeneratePost}
-                    onUpload={uploadMedia}
-                  />
+              <div className="mt-4 flex flex-wrap gap-2">
+                {accounts.length === 0 && (
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
+                    Нет аккаунтов
+                  </span>
+                )}
+                {accounts.map((acc) => (
+                  <span
+                    key={acc.id}
+                    className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700"
+                  >
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-[10px] font-semibold text-white">
+                      {platformIcon(acc.platform)}
+                    </span>
+                    {acc.displayName}
+                  </span>
                 ))}
               </div>
-            </div>
-          ))}
-      </section>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">
+                  Новый план
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Заполни поля и сгенерируй контент на неделю.
+                </p>
+              </div>
+              <div className="space-y-3">
+                <LabeledInput
+                  label="Название"
+                  value={batchForm.name}
+                  onChange={(value) => setBatchForm((p) => ({ ...p, name: value }))}
+                  placeholder="Неделя ..."
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <LabeledInput
+                    label="Начало"
+                    type="date"
+                    value={batchForm.startDate}
+                    onChange={(value) =>
+                      setBatchForm((p) => ({ ...p, startDate: value }))
+                    }
+                  />
+                  <LabeledInput
+                    label="Конец"
+                    type="date"
+                    value={batchForm.endDate}
+                    onChange={(value) =>
+                      setBatchForm((p) => ({ ...p, endDate: value }))
+                    }
+                  />
+                </div>
+                <LabeledInput
+                  label="Таймзона"
+                  value={batchForm.timezone}
+                  onChange={(value) =>
+                    setBatchForm((p) => ({ ...p, timezone: value }))
+                  }
+                />
+                <LabeledTextarea
+                  label="Темы недели"
+                  actionLabel={isGeneratingThemes ? "Генерация..." : "🎲 Сгенерировать темы"}
+                  onAction={
+                    isGeneratingThemes || isGeneratingBrief ? undefined : () => generateBrief("themes")
+                  }
+                  disabled={isGeneratingThemes}
+                  placeholder="Темы через запятую: тревога, выгорание..."
+                  value={batchForm.themes}
+                  onChange={(value) =>
+                    setBatchForm((p) => ({ ...p, themes: value }))
+                  }
+                />
+                <LabeledTextarea
+                  label="ТЗ для GPT (опционально)"
+                  actionLabel={isGeneratingBrief ? "Генерация..." : "✨ Сгенерировать ТЗ"}
+                  onAction={
+                    isGeneratingThemes || isGeneratingBrief ? undefined : () => generateBrief("brief")
+                  }
+                  disabled={isGeneratingBrief}
+                  placeholder="Подробное ТЗ для недели..."
+                  value={batchForm.notes}
+                  onChange={(value) =>
+                    setBatchForm((p) => ({ ...p, notes: value }))
+                  }
+                />
+                <div>
+                  <p className="text-xs text-slate-500">Платформы</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {platformList.map((p) => (
+                      <label
+                        key={p.key}
+                        className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={(batchForm.platforms as any)[p.key]}
+                          onChange={(e) =>
+                            setBatchForm((prev) => ({
+                              ...prev,
+                              platforms: {
+                                ...prev.platforms,
+                                [p.key]: e.target.checked,
+                              },
+                            }))
+                          }
+                        />
+                        <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[10px] font-semibold text-white">
+                          {platformIcon(p.key)}
+                        </span>
+                        {p.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={createBatch}
+                  disabled={loading}
+                  className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {loading ? "Генерируем..." : "Создать план"}
+                </button>
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-900">
+                    Посты
+                  </h2>
+                  {activeBatch && (
+                    <p className="text-xs text-slate-500">
+                      {activeBatch.startDate?.slice(0, 10)} —{" "}
+                      {activeBatch.endDate?.slice(0, 10)}
+                    </p>
+                  )}
+                </div>
+                {activeBatch && (
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={activeBatch.status} />
+                    <button
+                      className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      onClick={() => reloadBatch(activeBatch.id)}
+                    >
+                      Обновить батч
+                    </button>
+                    <button
+                      className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-60"
+                      disabled={scheduling}
+                      onClick={scheduleAll}
+                    >
+                      {scheduling ? "Отправляем..." : "Отправить неделю"}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {days.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {days.map((day) => (
+                    <button
+                      key={day}
+                      onClick={() => setActiveDay(day)}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                        activeDay === day
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {formatDate(day)}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {activeDay && (
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-slate-500">
+                    Посты за {activeDay}
+                  </p>
+                  <button
+                    onClick={() => generateAllPostsForDay(activeDay)}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Сгенерировать все посты дня ✨
+                  </button>
+                </div>
+              )}
+
+              <div className="rounded-2xl border border-slate-200 bg-white">
+                {posts.length === 0 ? (
+                  <div className="px-4 py-6 text-sm text-slate-500">
+                    Постов нет. Сначала создайте план.
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-slate-200">
+                    {posts
+                      .filter(
+                        (post) =>
+                          post.date?.slice(0, 10) === activeDay,
+                      )
+                      .map((post) => {
+                        const isSelected = post.id === selectedPostId;
+                        return (
+                          <li
+                            key={post.id}
+                            onClick={() => setSelectedPostId(post.id)}
+                            className={`flex cursor-pointer items-center gap-3 px-4 py-3 text-sm transition hover:bg-slate-50 ${
+                              isSelected ? "bg-slate-50" : ""
+                            }`}
+                          >
+                            <div className="w-24 text-xs text-slate-600">
+                              <input
+                                type="time"
+                                value={post.time || "10:00"}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) =>
+                                  setPosts((prev) =>
+                                    prev.map((p) =>
+                                      p.id === post.id ? { ...p, time: e.target.value } : p,
+                                    ),
+                                  )
+                                }
+                                onBlur={(e) => updatePost(post.id, { time: e.target.value })}
+                                className="w-24 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-[10px] font-semibold text-white">
+                                {platformIcon(post.platform)}
+                              </span>
+                              <span className="text-slate-800">
+                                {platformLabel[post.platform] ?? post.platform}
+                              </span>
+                              <select
+                                value={post.kind}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  const kind = e.target.value;
+                                  setPosts((prev) =>
+                                    prev.map((p) =>
+                                      p.id === post.id ? { ...p, kind, status: "edited" } : p,
+                                    ),
+                                  );
+                                  updatePost(post.id, { kind, status: "edited" } as any);
+                                }}
+                                className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 shadow-sm focus:border-slate-400 focus:outline-none"
+                              >
+                                <option value="post">post</option>
+                                <option value="reel">reel</option>
+                                <option value="tiktok">tiktok</option>
+                                <option value="story">story</option>
+                              </select>
+                            </div>
+                            <StatusBadge status={post.status} />
+                            {post.mediaUrl && (
+                              <span className="ml-auto text-[11px] text-slate-500">
+                                📎 медиа
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })}
+                  </ul>
+                )}
+              </div>
+            </section>
+          </div>
+
+          {/* Правая колонка */}
+          <aside className="space-y-4">
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              {selectedPost ? (
+                <SelectedPostEditor
+                  post={selectedPost}
+                  onChangeLocal={(updates) =>
+                    setPosts((prev) =>
+                      prev.map((p) =>
+                        p.id === selectedPost.id ? { ...p, ...updates } : p,
+                      ),
+                    )
+                  }
+                  onSave={updatePost}
+                  onRegenerate={regeneratePost}
+                  onUpload={uploadMedia}
+                />
+              ) : (
+                <p className="text-sm text-slate-500">
+                  Выбери пост слева, чтобы отредактировать его.
+                </p>
+              )}
+            </section>
+          </aside>
+        </div>
+      </div>
     </main>
   );
 }
@@ -662,14 +780,14 @@ function LabeledInput(props: {
   type?: string;
 }) {
   return (
-    <label className="block space-y-1 text-sm text-slate-200">
-      <span className="text-xs text-slate-400">{props.label}</span>
+    <label className="block space-y-1 text-sm text-slate-900">
+      <span className="text-xs text-slate-500">{props.label}</span>
       <input
         type={props.type || "text"}
         value={props.value}
         onChange={(e) => props.onChange(e.target.value)}
         placeholder={props.placeholder}
-        className="w-full rounded-xl border border-white/10 bg-slate-900/50 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none"
+        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
       />
     </label>
   );
@@ -685,15 +803,15 @@ function LabeledTextarea(props: {
   placeholder?: string;
 }) {
   return (
-    <label className="block space-y-1 text-sm text-slate-200">
+    <label className="block space-y-1 text-sm text-slate-900">
       <div className="flex items-center justify-between">
-        <span className="text-xs text-slate-400">{props.label}</span>
+        <span className="text-xs text-slate-500">{props.label}</span>
         {props.onAction && props.actionLabel && (
           <button
             type="button"
             onClick={props.onAction}
             disabled={props.disabled}
-            className="text-[11px] font-semibold text-indigo-200 hover:text-indigo-100 disabled:opacity-60"
+            className="text-[11px] font-semibold text-slate-700 hover:text-slate-900 disabled:opacity-60"
           >
             {props.actionLabel}
           </button>
@@ -703,7 +821,7 @@ function LabeledTextarea(props: {
         value={props.value}
         onChange={(e) => props.onChange(e.target.value)}
         placeholder={props.placeholder}
-        className="w-full rounded-xl border border-white/10 bg-slate-900/50 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none"
+        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
         rows={3}
       />
     </label>
@@ -726,8 +844,8 @@ function MediaUploader({
 
   return (
     <div
-      className={`relative flex min-h-[140px] flex-col items-center justify-center rounded-xl border border-dashed px-3 py-3 text-sm ${
-        dragOver ? "border-indigo-400 bg-indigo-500/10" : "border-white/10"
+      className={`relative flex min-h-[160px] flex-col items-center justify-center rounded-xl border border-dashed px-3 py-3 text-sm ${
+        dragOver ? "border-slate-400 bg-slate-100" : "border-slate-200 bg-slate-50"
       }`}
       onDragOver={(e) => {
         e.preventDefault();
@@ -743,27 +861,20 @@ function MediaUploader({
     >
       {post.mediaUrl ? (
         <div className="w-full space-y-2">
-          <div className="flex items-center gap-2">
-            <div className="h-14 w-14 overflow-hidden rounded-lg border border-white/10 bg-slate-900">
-              {post.mediaType?.startsWith("image") ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={post.mediaUrl}
-                  alt={post.mediaFilename ?? "media"}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-xs text-slate-400">
-                  {post.mediaFilename ?? "media"}
-                </div>
-              )}
+          <div className="flex items-center gap-3">
+            <div className="h-16 w-16 overflow-hidden rounded-lg border border-slate-200 bg-white">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={post.mediaUrl}
+                alt="media"
+                className="h-full w-full object-cover"
+              />
             </div>
-            <div className="text-xs text-slate-300">
-              <p className="font-semibold">{post.mediaFilename}</p>
-              <p className="text-slate-500">{post.mediaType}</p>
+            <div className="text-xs text-slate-600">
+              <p className="font-semibold">Медиа добавлено</p>
             </div>
           </div>
-          <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-indigo-200 hover:text-indigo-100">
+          <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-slate-700 hover:text-slate-900">
             <input
               type="file"
               className="hidden"
@@ -774,9 +885,9 @@ function MediaUploader({
         </div>
       ) : (
         <>
-          <p className="text-sm text-slate-200">Перетащи медиа сюда</p>
+          <p className="text-sm text-slate-700">Перетащи медиа сюда</p>
           <p className="text-xs text-slate-500">или выбери файл</p>
-          <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 px-3 py-1 text-xs text-indigo-200 hover:border-indigo-300 hover:text-indigo-100">
+          <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 shadow-sm hover:bg-slate-50">
             <input
               type="file"
               className="hidden"
@@ -790,156 +901,136 @@ function MediaUploader({
   );
 }
 
-function PreviewCard({ post }: { post: Post }) {
-  const commonText = (
-    <div className="space-y-2 text-xs text-slate-200">
-      <p className="font-semibold text-slate-100">@platform</p>
-      <div className="line-clamp-4 text-slate-300">{post.content}</div>
-    </div>
-  );
-
-  if (post.platform === "instagram") {
-    return (
-      <div className="h-full rounded-xl border border-white/10 bg-gradient-to-b from-white/5 to-white/0 p-3">
-        <div className="mb-2 flex items-center gap-2">
-          <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-pink-500 to-yellow-400" />
-          <p className="text-xs font-semibold text-slate-100">Instagram</p>
-        </div>
-        <div className="mb-2 h-36 rounded-lg border border-white/10 bg-slate-900/60" />
-        {commonText}
-      </div>
-    );
-  }
-
-  if (post.platform === "tiktok") {
-    return (
-      <div className="h-full rounded-xl border border-white/10 bg-gradient-to-b from-slate-900 to-slate-950 p-3">
-        <div className="mb-2 text-xs font-semibold text-white">TikTok</div>
-        <div className="mb-2 h-36 rounded-lg border border-white/10 bg-gradient-to-b from-slate-800 to-black" />
-        {commonText}
-      </div>
-    );
-  }
-
-  if (post.platform === "telegram") {
-    return (
-      <div className="h-full rounded-xl border border-white/10 bg-slate-900/60 p-3">
-        <div className="mb-2 text-xs font-semibold text-white">Telegram</div>
-        <div className="rounded-lg bg-slate-800/70 p-3 text-xs text-slate-100">
-          {post.content}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="h-full rounded-xl border border-white/10 bg-white/5 p-3">
-      <div className="mb-2 text-xs font-semibold text-white">
-        {platformLabel[post.platform] ?? post.platform}
-      </div>
-      {commonText}
-    </div>
-  );
-}
-
-function PostRow({
+function SelectedPostEditor({
   post,
-  onChange,
+  onChangeLocal,
+  onSave,
   onRegenerate,
   onUpload,
 }: {
   post: Post;
-  onChange: (id: number, payload: Partial<Post>) => Promise<void>;
+  onChangeLocal: (updates: Partial<Post>) => void;
+  onSave: (id: number, payload: Partial<Post>) => Promise<void>;
   onRegenerate: (id: number) => Promise<void>;
   onUpload: (id: number, file: File) => Promise<void>;
 }) {
   const [saving, setSaving] = useState(false);
   const [regenLoading, setRegenLoading] = useState(false);
-  const date = post.scheduledFor.slice(0, 10);
 
   const saveField = async (payload: Partial<Post>) => {
     setSaving(true);
-    await onChange(post.id, payload);
+    await onSave(post.id, payload);
     setSaving(false);
   };
 
   return (
-    <div className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 shadow-lg shadow-indigo-500/5 md:grid-cols-[1.4fr,1fr]">
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-white">
-            <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] uppercase">
-              {platformIcon(post.platform)}
-            </span>
-            {platformLabel[post.platform] ?? post.platform}
-          </span>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Текущий пост
+          </p>
+          <h2 className="mt-1 text-sm font-semibold text-slate-900">
+            {(platformLabel[post.platform] ?? post.platform) +
+              " · " +
+              post.date.slice(0, 10) +
+              " · " +
+              (post.time || "10:00")}
+          </h2>
+        </div>
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-700">
+          {post.kind}
+        </span>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs font-medium text-slate-600">Caption</label>
+        <textarea
+          className="mt-1 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+          rows={5}
+          value={post.caption ?? ""}
+          onChange={(e) => onChangeLocal({ caption: e.target.value, status: "edited" })}
+          onBlur={(e) => saveField({ caption: e.target.value, status: "edited" })}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs font-medium text-slate-600">
+          First comment (опционально)
+        </label>
+        <textarea
+          className="mt-1 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+          rows={3}
+          value={post.firstComment ?? ""}
+          onChange={(e) =>
+            onChangeLocal({ firstComment: e.target.value, status: "edited" })
+          }
+          onBlur={(e) => saveField({ firstComment: e.target.value, status: "edited" })}
+        />
+      </div>
+
+      <div className="flex items-center gap-3">
+        <div className="flex flex-col text-sm text-slate-700">
+          <span className="text-xs text-slate-500">Время</span>
+          <input
+            type="time"
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+            value={post.time || "10:00"}
+            onChange={(e) =>
+              onChangeLocal({
+                time: e.target.value,
+                status: "edited",
+              })
+            }
+            onBlur={(e) => {
+              saveField({
+                time: e.target.value,
+              });
+            }}
+          />
+        </div>
+        <div className="flex flex-col text-sm text-slate-700">
+          <span className="text-xs text-slate-500">Тип</span>
           <select
-            className="rounded-lg border border-white/10 bg-slate-900/50 px-2 py-1 text-xs text-white"
-            value={post.type}
-            onChange={(e) => saveField({ type: e.target.value, status: "edited" })}
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+            value={post.kind}
+            onChange={(e) => {
+              onChangeLocal({ kind: e.target.value, status: "edited" });
+              saveField({ kind: e.target.value, status: "edited" });
+            }}
           >
             <option value="post">post</option>
             <option value="reel">reel</option>
             <option value="tiktok">tiktok</option>
             <option value="story">story</option>
           </select>
-          <input
-            type="time"
-            className="rounded-lg border border-white/10 bg-slate-900/50 px-2 py-1 text-xs text-white"
-            value={post.localTime || "10:00"}
-            onChange={(e) =>
-              saveField({
-                localTime: e.target.value,
-                scheduledFor: localToUtc(
-                  date,
-                  e.target.value,
-                  post.timezone,
-                ).toISOString(),
-              } as any)
-            }
-          />
-          <StatusBadge status={post.status} error={post.lateError ?? undefined} />
         </div>
-        <div className="space-y-2">
-          <p className="text-xs text-slate-400">Caption</p>
-          <textarea
-            className="min-h-[120px] w-full rounded-xl border border-white/10 bg-slate-900/50 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none"
-            value={post.content}
-            onChange={(e) =>
-              saveField({ content: e.target.value, status: "edited" })
-            }
-          />
-        </div>
-        <div className="space-y-2">
-          <p className="text-xs text-slate-400">First comment (опционально)</p>
-          <textarea
-            className="min-h-[60px] w-full rounded-xl border border-white/10 bg-slate-900/50 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none"
-            value={post.firstComment ?? ""}
-            onChange={(e) =>
-              saveField({ firstComment: e.target.value, status: "edited" })
-            }
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            className="rounded-lg border border-white/10 px-3 py-2 text-xs text-white hover:border-indigo-400 disabled:opacity-60"
-            disabled={regenLoading}
-            onClick={async () => {
-              setRegenLoading(true);
-              await onRegenerate(post.id);
-              setRegenLoading(false);
-            }}
-          >
-            {regenLoading ? "Генерируем..." : "Regen"}
-          </button>
-          {saving && (
-            <span className="text-xs text-slate-400">Сохраняем...</span>
-          )}
+        <div className="ml-auto">
+          <StatusBadge status={post.status} />
         </div>
       </div>
-      <div className="space-y-3">
-        <MediaUploader post={post} onUpload={onUpload} />
-        <PreviewCard post={post} />
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={async () => {
+            setRegenLoading(true);
+            await onRegenerate(post.id);
+            setRegenLoading(false);
+          }}
+          className="inline-flex items-center rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-60"
+          disabled={regenLoading}
+        >
+          {regenLoading ? "Генерируем..." : "Regen"}
+        </button>
+        {saving && <span className="text-xs text-slate-500">Сохраняем...</span>}
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-slate-600">Медиа</label>
+        <div className="mt-2">
+          <MediaUploader post={post} onUpload={onUpload} />
+        </div>
       </div>
     </div>
   );

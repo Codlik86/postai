@@ -5,12 +5,12 @@ const DEFAULT_MODEL = "gpt-4.1-mini";
 export type PlannedPostInput = {
   date: string;
   platform: string;
-  type: string;
+  kind: string;
   theme: string;
 };
 
 export type GeneratedPostOutput = {
-  content: string;
+  caption: string;
   firstComment?: string;
 };
 
@@ -86,7 +86,7 @@ export async function generateWeeklyBrief(params: {
   }
 }
 
-export async function generatePostsForBatch(args: {
+export async function generateDayPosts(args: {
   productDescription: string;
   batchName: string;
   themes: string[];
@@ -109,7 +109,7 @@ export async function generatePostsForBatch(args: {
       posts: [
         {
           index: 0,
-          content: "Текст",
+          caption: "Текст",
           firstComment: "Опционально",
         },
       ],
@@ -150,12 +150,12 @@ export async function generatePostsForBatch(args: {
 
   try {
     const parsed = JSON.parse(content) as {
-      posts?: { index: number; content: string; firstComment?: string }[];
+      posts?: { index: number; caption: string; firstComment?: string }[];
     };
     const map: Record<number, GeneratedPostOutput> = {};
     (parsed.posts || []).forEach((p) => {
       map[p.index] = {
-        content: p.content,
+        caption: p.caption,
         firstComment: p.firstComment,
       };
     });
