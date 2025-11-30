@@ -1,3 +1,4 @@
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import {
@@ -6,17 +7,18 @@ import {
 } from "@/lib/gpt";
 
 export async function POST(
-  request: Request,
-  { params }: { params: { id: string } },
+  request: NextRequest,
+  context: any,
 ) {
   try {
-    const id = Number(params.id);
-    if (Number.isNaN(id)) {
+    const { id } = await context.params;
+    const numericId = Number(id);
+    if (Number.isNaN(numericId)) {
       return NextResponse.json({ error: "Invalid id" }, { status: 400 });
     }
 
     const post = await prisma.post.findUnique({
-      where: { id },
+      where: { id: numericId },
       include: { batch: true, account: true },
     });
 

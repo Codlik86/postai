@@ -1,17 +1,16 @@
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
 
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } },
-) {
-  const id = Number(params.id);
-  if (Number.isNaN(id)) {
+export async function GET(request: NextRequest, context: any) {
+  const { id } = await context.params;
+  const numericId = Number(id);
+  if (Number.isNaN(numericId)) {
     return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   }
 
   const batch = await prisma.contentBatch.findUnique({
-    where: { id },
+    where: { id: numericId },
     include: {
       posts: {
         include: { account: true },

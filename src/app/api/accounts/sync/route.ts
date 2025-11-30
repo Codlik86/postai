@@ -1,8 +1,9 @@
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { fetchLateAccounts } from "@/lib/late";
 
-export async function GET() {
+export async function GET(_request: NextRequest) {
   try {
     const lateAccounts = await fetchLateAccounts();
     const accounts = [];

@@ -1,3 +1,4 @@
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import {
@@ -59,7 +60,7 @@ function platformType(platform: string) {
   return "post";
 }
 
-export async function GET() {
+export async function GET(_request: NextRequest) {
   const batches = await prisma.contentBatch.findMany({
     orderBy: { createdAt: "desc" },
     include: {
@@ -82,7 +83,7 @@ export async function GET() {
   return NextResponse.json({ batches: data });
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {

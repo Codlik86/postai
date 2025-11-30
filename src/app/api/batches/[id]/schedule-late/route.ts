@@ -1,19 +1,18 @@
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { createLatePost } from "@/lib/late";
 
-export async function POST(
-  request: Request,
-  { params }: { params: { id: string } },
-) {
+export async function POST(request: NextRequest, context: any) {
   try {
-    const id = Number(params.id);
-    if (Number.isNaN(id)) {
+    const { id } = await context.params;
+    const numericId = Number(id);
+    if (Number.isNaN(numericId)) {
       return NextResponse.json({ error: "Invalid batch id" }, { status: 400 });
     }
 
     const batch = await prisma.contentBatch.findUnique({
-      where: { id },
+      where: { id: numericId },
       include: {
         posts: {
           include: { account: true },

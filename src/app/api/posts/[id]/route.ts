@@ -1,20 +1,22 @@
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
 
 export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } },
+  request: NextRequest,
+  context: any,
 ) {
   try {
-    const id = Number(params.id);
-    if (Number.isNaN(id)) {
+    const { id } = await context.params;
+    const numericId = Number(id);
+    if (Number.isNaN(numericId)) {
       return NextResponse.json({ error: "Invalid id" }, { status: 400 });
     }
 
     const body = await request.json();
 
     const updated = await prisma.post.update({
-      where: { id },
+      where: { id: numericId },
       data: {
         content: body.content,
         firstComment: body.firstComment,
