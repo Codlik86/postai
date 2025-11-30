@@ -15,13 +15,11 @@ export async function GET(_request: NextRequest) {
           platform: acc.platform,
           username: acc.username,
           displayName: acc.displayName,
-          avatarUrl: acc.profilePicture ?? null,
         },
         create: {
           platform: acc.platform,
           username: acc.username,
           displayName: acc.displayName,
-          avatarUrl: acc.profilePicture ?? null,
           lateAccountId: acc._id,
         },
       });
