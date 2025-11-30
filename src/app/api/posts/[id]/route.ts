@@ -4,7 +4,7 @@ import prisma from "@/lib/db";
 
 export async function PATCH(
   request: NextRequest,
-  context: any,
+  context: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await context.params;

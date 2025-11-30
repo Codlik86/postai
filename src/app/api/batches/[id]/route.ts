@@ -2,7 +2,10 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
 
-export async function GET(request: NextRequest, context: any) {
+export async function GET(
+  _request: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
   const { id } = await context.params;
   const numericId = Number(id);
   if (Number.isNaN(numericId)) {

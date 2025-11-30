@@ -7,8 +7,8 @@ import {
 } from "@/lib/gpt";
 
 export async function POST(
-  request: NextRequest,
-  context: any,
+  _request: NextRequest,
+  context: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await context.params;

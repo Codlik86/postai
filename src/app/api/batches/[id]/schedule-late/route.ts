@@ -3,7 +3,10 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/db";
 import { createLatePost } from "@/lib/late";
 
-export async function POST(request: NextRequest, context: any) {
+export async function POST(
+  _request: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
   try {
     const { id } = await context.params;
     const numericId = Number(id);
