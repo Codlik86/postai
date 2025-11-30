@@ -3,10 +3,16 @@ const LATE_BASE_URL =
   process.env.LATE_API_BASE_URL ?? "https://getlate.dev/api/v1";
 
 if (!LATE_API_KEY) {
-  throw new Error("Missing LATE_API_KEY");
+  console.warn(
+    "[Late] LATE_API_KEY is not set. Late API calls will fail at runtime.",
+  );
 }
 
 export async function lateFetch(path: string, init?: RequestInit) {
+  if (!LATE_API_KEY) {
+    throw new Error("LATE_API_KEY is not configured on the server");
+  }
+
   const res = await fetch(`${LATE_BASE_URL}${path}`, {
     ...init,
     headers: {
