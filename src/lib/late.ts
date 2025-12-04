@@ -46,20 +46,29 @@ export async function fetchLateAccounts(): Promise<LateAccount[]> {
 }
 
 export type LateMediaFile = {
-  type: "image" | "video" | "gif" | "document";
+  id?: string;
+  type?: "image" | "video" | "gif" | "document";
   url: string;
-  filename: string;
+  filename?: string;
   size?: number;
   mimeType?: string;
 };
 
-export async function uploadMediaToLate(
-  file: File,
-): Promise<LateMediaFile> {
-  const form = new FormData();
-  form.append("files", file);
+export async function uploadMediaToLate(params: {
+  file: Blob;
+  filename: string;
+  mimeType: string;
+  lateAccountId: string;
+}): Promise<LateMediaFile> {
+  if (!LATE_API_KEY) {
+    throw new Error("LATE_API_KEY is not configured on the server");
+  }
 
-  const res = await fetch(`${LATE_BASE_URL}/media`, {
+  const form = new FormData();
+  form.append("file", params.file, params.filename);
+  form.append("accountId", params.lateAccountId);
+
+  const res = await fetch(`${LATE_BASE_URL}/media/upload`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${LATE_API_KEY}`,
@@ -68,19 +77,15 @@ export async function uploadMediaToLate(
   });
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(
-      `Late media upload failed ${res.status}: ${text || "no body"}`,
-    );
+    const text = await res.text().catch(() => "");
+    console.error("Late media upload failed", res.status, text);
+    throw new Error(text || `Late upload failed with status ${res.status}`);
   }
 
-  const json = (await res.json()) as {
-    files?: LateMediaFile[];
-  };
-
-  const media = json.files?.[0];
-  if (!media) {
-    throw new Error("Late media upload response missing file");
+  const json = (await res.json()) as { file?: LateMediaFile; files?: LateMediaFile[] };
+  const media = json.file ?? json.files?.[0];
+  if (!media || !media.url) {
+    throw new Error("Late media upload response missing file data");
   }
   return media;
 }

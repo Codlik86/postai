@@ -26,7 +26,7 @@ model ContentBatch {
   endDate   DateTime
   timezone  String   @default("Europe/Moscow")
   themes    String?
-  gptBrief  String?
+  gptBrief  String?  @db.Text
   status    String   @default("draft")
 
   createdAt DateTime @default(now())

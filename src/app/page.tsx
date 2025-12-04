@@ -345,17 +345,35 @@ useEffect(() => {
   }
 
   async function uploadMedia(id: number, file: File) {
+    const post = posts.find((p) => p.id === id);
+    if (!post) {
+      showToast({ type: "error", title: "Пост не найден" });
+      return;
+    }
     const form = new FormData();
     form.append("file", file);
+    form.append("accountId", String(post.accountId));
     const res = await fetch("/api/media/upload", {
       method: "POST",
       body: form,
     });
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      showToast({ type: "error", title: "Не удалось загрузить медиа" });
+      showToast({
+        type: "error",
+        title: "Не удалось загрузить медиа",
+        description: data?.error,
+      });
       return;
     }
-    const media: LateMediaFile = await res.json();
+    const media: LateMediaFile = data.media;
+    if (!media?.url) {
+      showToast({
+        type: "error",
+        title: "Ответ загрузки без ссылки на медиа",
+      });
+      return;
+    }
     await updatePost(id, {
       mediaUrl: media.url,
       status: "edited",
