@@ -68,7 +68,7 @@ export async function uploadMediaToLate(params: {
   form.append("file", params.file, params.filename);
   form.append("accountId", params.lateAccountId);
 
-  const res = await fetch(`${LATE_BASE_URL}/media/upload`, {
+  const res = await fetch(`${LATE_BASE_URL}/media`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${LATE_API_KEY}`,
