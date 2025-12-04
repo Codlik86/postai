@@ -35,8 +35,10 @@ export async function POST(req: NextRequest) {
     }
 
     const media = await uploadMediaToLate({
-      file,
-      filename: file.name,
+      file: new Blob([await file.arrayBuffer()], {
+        type: file.type || "application/octet-stream",
+      }),
+      filename: file.name || "upload",
       mimeType: file.type || "application/octet-stream",
       lateAccountId: account.lateAccountId,
     });
