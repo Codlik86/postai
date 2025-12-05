@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
         data: {
           caption: data.caption,
           firstComment: data.firstComment,
+          hashtags: data.hashtags,
           status: "generated",
         },
       });

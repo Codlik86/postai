@@ -20,6 +20,7 @@ export async function PATCH(
       data: {
         caption: body.caption,
         firstComment: body.firstComment,
+        hashtags: body.hashtags ?? undefined,
         time: body.time ?? undefined,
         kind: body.kind ?? undefined,
         mediaUrl: body.media?.url ?? body.mediaUrl,

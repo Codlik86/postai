@@ -44,12 +44,14 @@ export async function POST(
 
     const content = generated[0]?.caption ?? post.caption ?? "";
     const firstComment = generated[0]?.firstComment ?? post.firstComment;
+    const hashtags = generated[0]?.hashtags ?? post.hashtags;
 
     const updated = await prisma.post.update({
       where: { id: post.id },
       data: {
         caption: content,
         firstComment,
+        hashtags,
         status: "generated",
       },
     });

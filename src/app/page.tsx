@@ -118,6 +118,7 @@ export default function Page() {
   });
   const [activeBatch, setActiveBatch] = useState<Batch | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [disabledDays, setDisabledDays] = useState<Record<string, boolean>>({});
   const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
   const [activeDay, setActiveDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -125,6 +126,7 @@ export default function Page() {
   const [scheduling, setScheduling] = useState(false);
   const [isGeneratingThemes, setIsGeneratingThemes] = useState(false);
   const [isGeneratingBrief, setIsGeneratingBrief] = useState(false);
+  const [isGeneratingAll, setIsGeneratingAll] = useState(false);
 
 useEffect(() => {
   const name = defaultWeekName();
@@ -144,6 +146,7 @@ useEffect(() => {
     if (!posts.length) {
       setSelectedPostId(null);
       setActiveDay(null);
+      setDisabledDays({});
     }
   }, [posts, selectedPostId]);
 
@@ -286,7 +289,7 @@ useEffect(() => {
       setActiveBatch(data.batch);
       setPosts(data.posts);
       setSelectedPostId(data.posts?.[0]?.id ?? null);
-    setActiveDay(data.posts?.[0] ? data.posts[0].date?.slice(0, 10) : null);
+      setActiveDay(data.posts?.[0] ? data.posts[0].date?.slice(0, 10) : null);
       showToast({ type: "success", title: "План создан" });
       if (batchForm.name === "") {
         setBatchForm((prev) => ({ ...prev, name: defaultWeekName() }));
@@ -438,28 +441,64 @@ useEffect(() => {
     }
   }, [activeDay, days]);
 
-  async function generateAllPostsForDay(day: string) {
-    if (!activeBatch) return;
-    try {
-      const res = await fetch("/api/generate/day", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ batchId: activeBatch.id, date: day }),
+  useEffect(() => {
+    setDisabledDays((prev) => {
+      const next = { ...prev };
+      days.forEach((d) => {
+        if (next[d] === undefined) next[d] = false;
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Ошибка генерации");
+      return next;
+    });
+  }, [days]);
+
+  async function generateAllPosts() {
+    if (!activeBatch) return;
+    setIsGeneratingAll(true);
+    try {
+      const activeDayKeys = Array.from(
+        new Set(
+          posts
+            .map((p) => p.date?.slice(0, 10))
+            .filter(Boolean)
+            .filter((d) => !disabledDays[d as string]),
+        ),
+      ) as string[];
+
+      if (!activeDayKeys.length) {
+        showToast({
+          type: "warning",
+          title: "Нет активных дней для генерации",
+        });
+        return;
       }
-      const data = await res.json();
-      setPosts(data.posts ?? []);
-      showToast({ type: "success", title: "Посты дня обновлены" });
+
+      for (const dayKey of activeDayKeys) {
+        const res = await fetch("/api/generate/day", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ batchId: activeBatch.id, date: dayKey }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Ошибка генерации");
+        }
+      }
+
+      await reloadBatch(activeBatch.id);
+      showToast({ type: "success", title: "Посты обновлены" });
     } catch (err: any) {
       showToast({
         type: "error",
-        title: "Не удалось сгенерировать",
+        title: "Не удалось сгенерировать посты",
         description: err.message,
       });
+    } finally {
+      setIsGeneratingAll(false);
     }
+  }
+
+  function toggleDay(day: string) {
+    setDisabledDays((prev) => ({ ...prev, [day]: !prev[day] }));
   }
 
   return (
@@ -661,19 +700,29 @@ useEffect(() => {
               </div>
 
               {days.length > 0 && (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-3">
                   {days.map((day) => (
-                    <button
+                    <div
                       key={day}
-                      onClick={() => setActiveDay(day)}
-                      className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                        activeDay === day
-                          ? "border-slate-900 bg-slate-900 text-white"
-                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                      }`}
+                      className="flex items-center gap-2 text-xs text-slate-700"
                     >
-                      {formatDate(day)}
-                    </button>
+                      <input
+                        type="checkbox"
+                        checked={!disabledDays[day]}
+                        onChange={() => toggleDay(day)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setActiveDay(day)}
+                        className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                          activeDay === day
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        } ${disabledDays[day] ? "opacity-50" : ""}`}
+                      >
+                        {formatDate(day)}
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -684,10 +733,13 @@ useEffect(() => {
                     Посты за {activeDay}
                   </p>
                   <button
-                    onClick={() => generateAllPostsForDay(activeDay)}
-                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    onClick={generateAllPosts}
+                    disabled={isGeneratingAll}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                   >
-                    Сгенерировать все посты дня ✨
+                    {isGeneratingAll
+                      ? "Генерация..."
+                      : "Сгенерировать все посты ✨"}
                   </button>
                 </div>
               )}
@@ -996,6 +1048,20 @@ function SelectedPostEditor({
             onChangeLocal({ firstComment: e.target.value, status: "edited" })
           }
           onBlur={(e) => saveField({ firstComment: e.target.value, status: "edited" })}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs font-medium text-slate-600">Hashtags</label>
+        <input
+          type="text"
+          className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+          value={post.hashtags ?? ""}
+          onChange={(e) =>
+            onChangeLocal({ hashtags: e.target.value, status: "edited" })
+          }
+          onBlur={(e) => saveField({ hashtags: e.target.value, status: "edited" })}
+          placeholder="#пример #тревога #поддержка"
         />
       </div>
 

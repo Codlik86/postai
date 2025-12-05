@@ -50,6 +50,7 @@ model Post {
 
   caption      String?
   firstComment String?
+  hashtags     String?
   mediaUrl     String?
 
   status       String   @default("draft")

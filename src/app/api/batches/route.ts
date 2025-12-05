@@ -119,6 +119,7 @@ export async function POST(request: NextRequest) {
       time: string;
       caption: string | null;
       firstComment: string | null;
+      hashtags: string | null;
       mediaUrl: string | null;
       status: string;
     }[] = [];
@@ -135,6 +136,7 @@ export async function POST(request: NextRequest) {
           time: "10:00",
           caption: null,
           firstComment: null,
+          hashtags: null,
           mediaUrl: null,
           status: "draft",
         });

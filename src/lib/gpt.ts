@@ -12,6 +12,7 @@ export type PlannedPostInput = {
 export type GeneratedPostOutput = {
   caption: string;
   firstComment?: string;
+  hashtags?: string;
 };
 
 export async function generateWeeklyBrief(params: {
@@ -110,7 +111,8 @@ export async function generateDayPosts(args: {
         {
           index: 0,
           caption: "Текст",
-          firstComment: "Опционально",
+          first_comment: "Опционально",
+          hashtags: "#пример #пример2",
         },
       ],
     },
@@ -150,13 +152,20 @@ export async function generateDayPosts(args: {
 
   try {
     const parsed = JSON.parse(content) as {
-      posts?: { index: number; caption: string; firstComment?: string }[];
+      posts?: {
+        index: number;
+        caption: string;
+        firstComment?: string;
+        first_comment?: string;
+        hashtags?: string;
+      }[];
     };
     const map: Record<number, GeneratedPostOutput> = {};
     (parsed.posts || []).forEach((p) => {
       map[p.index] = {
         caption: p.caption,
-        firstComment: p.firstComment,
+        firstComment: p.firstComment ?? p.first_comment,
+        hashtags: p.hashtags,
       };
     });
     return map;
